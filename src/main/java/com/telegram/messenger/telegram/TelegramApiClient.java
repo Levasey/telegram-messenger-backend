@@ -4,7 +4,9 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientException;
@@ -21,14 +23,25 @@ public class TelegramApiClient {
 	private final TelegramBotProperties properties;
 	private final RestClient restClient;
 
+	@Autowired
 	public TelegramApiClient(TelegramBotProperties properties) {
-		this.properties = properties;
-		this.restClient = RestClient.builder()
+		this(properties, RestClient.builder()
 				.baseUrl("https://api.telegram.org")
-				.build();
+				.build());
 	}
 
 	/**
+	 * Для тестов с {@link org.springframework.test.web.client.MockRestServiceServer}.
+	 */
+	TelegramApiClient(TelegramBotProperties properties, RestClient restClient) {
+		this.properties = properties;
+		this.restClient = restClient;
+	}
+
+	/**
+	 * Отправка через Bot API. Telegram часто отвечает HTTP 200 с телом {@code {"ok":false,...}} — без разбора JSON
+	 * ошибку не увидеть; здесь проверяются и статус 2xx, и поле {@code ok}.
+	 *
 	 * @return {@code true}, если Telegram вернул {@code ok: true}; иначе {@code false} (в т.ч. при сетевой ошибке)
 	 */
 	public boolean sendMessage(long chatId, String text) {
@@ -38,7 +51,7 @@ public class TelegramApiClient {
 		}
 		String path = "/bot" + properties.getToken() + "/sendMessage";
 		try {
-			TelegramBotApiResponse response = restClient.post()
+			ResponseEntity<TelegramBotApiResponse> entity = restClient.post()
 					.uri(path)
 					.contentType(MediaType.APPLICATION_JSON)
 					.body(Map.of(
@@ -46,7 +59,15 @@ public class TelegramApiClient {
 							"text", text
 					))
 					.retrieve()
-					.body(TelegramBotApiResponse.class);
+					.toEntity(TelegramBotApiResponse.class);
+			if (!entity.getStatusCode().is2xxSuccessful()) {
+				log.warn(
+						"Telegram sendMessage: неуспешный HTTP {} (chat_id={})",
+						entity.getStatusCode(),
+						chatId);
+				return false;
+			}
+			TelegramBotApiResponse response = entity.getBody();
 			if (response == null) {
 				log.warn("Telegram sendMessage: пустое тело ответа (chat_id={})", chatId);
 				return false;
