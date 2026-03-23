@@ -1,6 +1,6 @@
 # telegram-messenger-backend
 
-Бэкенд MVP под [Telegram Bot API](https://core.telegram.org/bots/api) на **Spring Boot 3.5** и **Java 21**: REST, JPA, валидация, Actuator, in-memory **H2** для локальной разработки.
+Бэкенд MVP под [Telegram Bot API](https://core.telegram.org/bots/api) на **Spring Boot 3.5** и **Java 21**: REST, JPA, валидация, Actuator, in-memory **H2** для локальной разработки. Webhook разбирает входящие `update` с полем `message`: пользователь сохраняется в таблице **clients**, бот отправляет приветствие при первом обращении и при команде **`/start`** (если задан токен).
 
 Бот в Telegram: [@vokals_bot](https://t.me/vokals_bot).
 
@@ -95,13 +95,45 @@ export SPRING_PROFILES_ACTIVE=local
 
 Если заданы и `TELEGRAM_BOT_TOKEN`, и `telegram.bot.token` в YAML, обычно выигрывает переменная окружения. Для варианта только с файлом не экспортируйте `TELEGRAM_BOT_TOKEN`.
 
+### Текст приветствия
+
+В `application.yml` (или `application-local.yml`) можно задать шаблон:
+
+```yaml
+telegram:
+  bot:
+    welcome-message: "Добро пожаловать, {name}! Рады видеть вас."
+```
+
+Плейсхолдер **`{name}`** подставляется из `first_name` пользователя в Telegram; если имени нет — используется `@username`, иначе строка «гость».
+
+Если токен бота **пустой**, запись в БД всё равно создаётся/обновляется, но вызов [`sendMessage`](https://core.telegram.org/bots/api#sendmessage) не выполняется (удобно для локальных прогонов без бота).
+
 ## HTTP API
 
 | Метод | Путь | Описание |
 |--------|------|----------|
-| `POST` | `/api/telegram/webhook` | Заготовка под `setWebhook`: тело запроса от Telegram (разбор JSON — по мере развития MVP). |
+| `POST` | `/api/telegram/webhook` | Тело — JSON [Update](https://core.telegram.org/bots/api#update) от Telegram. Обрабатывается объект `message`: данные пользователя пишутся в **`clients`**, при новом клиенте или `/start` отправляется приветствие. |
 
 В проде webhook доступен только по **HTTPS**; URL регистрируется методом [`setWebhook`](https://core.telegram.org/bots/api#setwebhook).
+
+Пример регистрации (подставьте токен и публичный HTTPS-URL):
+
+```bash
+curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your.host/api/telegram/webhook"
+```
+
+## Данные: клиенты
+
+Таблица **`clients`** (JPA-сущность `Client`):
+
+| Поле | Описание |
+|------|----------|
+| `telegram_user_id` | Уникальный идентификатор пользователя в Telegram |
+| `username`, `first_name`, `last_name` | Профиль; обновляются при новых сообщениях |
+| `created_at` | Время первой записи в БД |
+
+Просмотр в разработке: [H2 Console](#h2-console), таблица `CLIENTS`.
 
 ## Actuator
 
