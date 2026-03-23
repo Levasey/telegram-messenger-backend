@@ -1,24 +1,25 @@
 # Порт по умолчанию 9090 — реже конфликтует с другими сервисами на 8080. Переопределение: SERVER_PORT=8080
+#
+# Базовый профиль (default): настройки для публичного деплоя — без H2 console и без ddl-auto: update.
+# Локально: SPRING_PROFILES_ACTIVE=local (см. второй документ ниже и application-local.yml.example).
 server:
   port: ${SERVER_PORT:9090}
 
 spring:
   application:
     name: telegram-messenger-backend
-  # Локально: SPRING_PROFILES_ACTIVE=local и файл application-local.yml (см. application-local.yml.example)
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:default}
   datasource:
-    url: jdbc:h2:mem:telegram;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   h2:
     console:
-      enabled: true
+      enabled: false
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
@@ -38,3 +39,21 @@ management:
     web:
       exposure:
         include: health,info,metrics
+
+---
+# Локальная разработка: in-memory H2, консоль /h2-console, автосхема через Hibernate
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:h2:mem:telegram;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: update

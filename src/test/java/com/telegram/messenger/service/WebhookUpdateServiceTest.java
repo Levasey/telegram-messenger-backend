@@ -1,12 +1,7 @@
 package com.telegram.messenger.service;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +10,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.telegram.messenger.telegram.TelegramApiClient;
 
 @ExtendWith(MockitoExtension.class)
 class WebhookUpdateServiceTest {
@@ -28,36 +22,19 @@ class WebhookUpdateServiceTest {
 	@Mock
 	private WebhookMessageTransactionService messageTransactionService;
 
-	@Mock
-	private TelegramApiClient telegramApiClient;
-
 	private WebhookUpdateService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new WebhookUpdateService(
 				new ObjectMapper(),
-				messageTransactionService,
-				telegramApiClient);
+				messageTransactionService);
 	}
 
 	@Test
-	void delegatesToTransactionService_andSendsWhenIntentPresent() {
-		when(messageTransactionService.upsertClientAndMaybeWelcomeIntent(org.mockito.ArgumentMatchers.any()))
-				.thenReturn(Optional.of(new WelcomeSendIntent(99L, "Здравствуйте, Иван!")));
-
+	void delegatesToTransactionService_whenMessagePresent() {
 		service.handleRawUpdate(NEW_USER_UPDATE);
 
-		verify(telegramApiClient).sendMessage(eq(99L), eq("Здравствуйте, Иван!"));
-	}
-
-	@Test
-	void noSendWhenTransactionReturnsEmpty() {
-		when(messageTransactionService.upsertClientAndMaybeWelcomeIntent(org.mockito.ArgumentMatchers.any()))
-				.thenReturn(Optional.empty());
-
-		service.handleRawUpdate(NEW_USER_UPDATE);
-
-		verify(telegramApiClient, never()).sendMessage(org.mockito.ArgumentMatchers.anyLong(), any());
+		verify(messageTransactionService).upsertClientAndMaybeWelcomeIntent(any());
 	}
 }

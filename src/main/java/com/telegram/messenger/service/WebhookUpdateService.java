@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.telegram.messenger.telegram.TelegramApiClient;
 import com.telegram.messenger.telegram.dto.TelegramUpdateDto;
 
 @Service
@@ -16,15 +15,12 @@ public class WebhookUpdateService {
 
 	private final ObjectMapper objectMapper;
 	private final WebhookMessageTransactionService messageTransactionService;
-	private final TelegramApiClient telegramApiClient;
 
 	public WebhookUpdateService(
 			ObjectMapper objectMapper,
-			WebhookMessageTransactionService messageTransactionService,
-			TelegramApiClient telegramApiClient) {
+			WebhookMessageTransactionService messageTransactionService) {
 		this.objectMapper = objectMapper;
 		this.messageTransactionService = messageTransactionService;
-		this.telegramApiClient = telegramApiClient;
 	}
 
 	public void handleRawUpdate(String body) {
@@ -36,9 +32,7 @@ public class WebhookUpdateService {
 			if (update.getMessage() == null) {
 				return;
 			}
-			messageTransactionService
-					.upsertClientAndMaybeWelcomeIntent(update.getMessage())
-					.ifPresent(intent -> telegramApiClient.sendMessage(intent.chatId(), intent.text()));
+			messageTransactionService.upsertClientAndMaybeWelcomeIntent(update.getMessage());
 		}
 		catch (Exception e) {
 			log.warn("Не удалось разобрать webhook: {}", e.getMessage());

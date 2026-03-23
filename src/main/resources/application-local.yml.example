@@ -1,5 +1,6 @@
 # Скопируйте в application-local.yml (файл в .gitignore) и подставьте токен от @BotFather.
-# Запуск с профилем local: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+# Профиль local включает in-memory H2, H2 Console и ddl-auto: update (см. application.yml).
+# Запуск: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 # или: export SPRING_PROFILES_ACTIVE=local
 
 telegram:

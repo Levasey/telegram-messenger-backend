@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -21,35 +22,40 @@ public class WebhookMessageTransactionService {
 
 	private final ClientRepository clientRepository;
 	private final TelegramBotProperties botProperties;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public WebhookMessageTransactionService(
 			ClientRepository clientRepository,
-			TelegramBotProperties botProperties) {
+			TelegramBotProperties botProperties,
+			ApplicationEventPublisher eventPublisher) {
 		this.clientRepository = clientRepository;
 		this.botProperties = botProperties;
+		this.eventPublisher = eventPublisher;
 	}
 
 	/**
-	 * Только работа с БД; вызов Telegram API выполняется снаружи после коммита.
+	 * Сохранение клиента в транзакции; при необходимости публикует {@link WelcomeSendIntent},
+	 * который обрабатывается после успешного коммита (см. {@link WelcomeMessageAfterCommitListener}).
 	 */
 	@Transactional
-	public Optional<WelcomeSendIntent> upsertClientAndMaybeWelcomeIntent(TelegramMessageDto message) {
+	public void upsertClientAndMaybeWelcomeIntent(TelegramMessageDto message) {
 		TelegramUserDto from = message.getFrom();
 		if (from == null || Boolean.TRUE.equals(from.getBot())) {
-			return Optional.empty();
+			return;
 		}
-		if (from.getId() == null) {
+		Long telegramUserId = from.getId();
+		if (telegramUserId == null) {
 			log.debug("Пропуск сообщения: у from отсутствует id");
-			return Optional.empty();
+			return;
 		}
 		if (message.getChat() == null || message.getChat().getId() == null) {
-			return Optional.empty();
+			return;
 		}
 		long chatId = message.getChat().getId();
-		Optional<Client> existing = clientRepository.findByTelegramUserId(from.getId());
+		Optional<Client> existing = clientRepository.findByTelegramUserId(telegramUserId);
 		boolean isNew = existing.isEmpty();
 		Client client = existing.orElseGet(Client::new);
-		client.setTelegramUserId(from.getId());
+		client.setTelegramUserId(telegramUserId);
 		client.setUsername(from.getUsername());
 		client.setFirstName(from.getFirstName());
 		client.setLastName(from.getLastName());
@@ -58,13 +64,16 @@ public class WebhookMessageTransactionService {
 		if (isNew || isStartCommand(message.getText())) {
 			String name = displayName(from);
 			String text = botProperties.getWelcomeMessage().replace("{name}", name);
-			return Optional.of(new WelcomeSendIntent(chatId, text));
+			eventPublisher.publishEvent(new WelcomeSendIntent(chatId, text));
 		}
-		return Optional.empty();
 	}
 
+	/**
+	 * Команда /start, в т.ч. в группах как {@code /start@BotUsername} (Telegram шлёт такой текст в апдейте).
+	 * При необходимости точнее можно опираться на {@code entities} типа bot_command в DTO.
+	 */
 	static boolean isStartCommand(String rawText) {
-		String cmd = trimCommand(rawText);
+		String cmd = firstToken(rawText);
 		if (cmd.isEmpty()) {
 			return false;
 		}
@@ -75,13 +84,18 @@ public class WebhookMessageTransactionService {
 		return "/start".equalsIgnoreCase(cmd);
 	}
 
-	private static String trimCommand(String text) {
+	/** Первый «словесный» токен текста (до любого whitespace), после trim всего текста. */
+	private static String firstToken(String text) {
 		if (text == null) {
 			return "";
 		}
 		String t = text.trim();
-		int space = t.indexOf(' ');
-		return space > 0 ? t.substring(0, space) : t;
+		int n = t.length();
+		int i = 0;
+		while (i < n && !Character.isWhitespace(t.charAt(i))) {
+			i++;
+		}
+		return t.substring(0, i);
 	}
 
 	private static String displayName(TelegramUserDto from) {

@@ -1,6 +1,6 @@
 # telegram-messenger-backend
 
-Бэкенд MVP под [Telegram Bot API](https://core.telegram.org/bots/api) на **Spring Boot 3.5** и **Java 21**: REST, JPA, валидация, Actuator, in-memory **H2** для локальной разработки. Webhook разбирает входящие `update` с полем `message`: пользователь сохраняется в таблице **clients**, бот отправляет приветствие при первом обращении и при команде **`/start`** (если задан токен).
+Бэкенд MVP под [Telegram Bot API](https://core.telegram.org/bots/api) на **Spring Boot 3.5** и **Java 21**: REST, JPA, валидация, Actuator. В **профиле `local`** — in-memory **H2** для разработки; базовый профиль (`default`) ориентирован на прод: URL БД из **`SPRING_DATASOURCE_URL`**, **H2 Console выключена**, **`ddl-auto: none`**. Webhook разбирает входящие `update` с полем `message`: пользователь сохраняется в таблице **clients**, бот отправляет приветствие при первом обращении и при команде **`/start`** (если задан токен).
 
 Бот в Telegram: [@vokals_bot](https://t.me/vokals_bot).
 
@@ -27,11 +27,20 @@ make verify
 # эквивалент: ./mvnw clean verify
 ```
 
-Запуск приложения (порт по умолчанию **9090**, чтобы реже пересекаться с типичным **8080** у других приложений; профиль **`default`** — токен бота не обязателен):
+Локальный запуск с **H2** (порт по умолчанию **9090**; токен бота не обязателен):
 
 ```bash
+make run-local
+# эквивалент: SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
+```
+
+Запуск в режиме как на **проде** (нужны **`SPRING_DATASOURCE_URL`** и драйвер БД в classpath, например PostgreSQL):
+
+```bash
+export SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/yourdb'
+export SPRING_DATASOURCE_USERNAME=...
+export SPRING_DATASOURCE_PASSWORD=...
 make run
-# эквивалент: ./mvnw spring-boot:run
 ```
 
 Свой порт при необходимости:
@@ -55,8 +64,8 @@ make help
 | `make test` | Только тесты |
 | `make package` | Сборка JAR без тестов |
 | `make clean` | Очистка `target/` |
-| `make run` | Запуск с профилем `default` |
-| `make run-local` | Запуск с `SPRING_PROFILES_ACTIVE=local` (см. ниже) |
+| `make run` | Запуск с профилем `default` (БД из env, см. выше) |
+| `make run-local` | H2 in-memory, H2 Console, `ddl-auto: update` (см. ниже) |
 
 ## Токен бота (не коммитить)
 
@@ -137,7 +146,7 @@ curl -s -G "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 | `username`, `first_name`, `last_name` | Профиль; обновляются при новых сообщениях |
 | `created_at` | Время первой записи в БД |
 
-Просмотр в разработке: [H2 Console](#h2-console), таблица `CLIENTS`.
+Просмотр при **`SPRING_PROFILES_ACTIVE=local`**: [H2 Console](#h2-console), таблица `CLIENTS`.
 
 ## Actuator
 
@@ -151,11 +160,13 @@ curl -s http://localhost:9090/actuator/health
 
 ## H2 Console
 
-Для разработки: [http://localhost:9090/h2-console](http://localhost:9090/h2-console).
+Только в профиле **`local`**: [http://localhost:9090/h2-console](http://localhost:9090/h2-console).
 
 - JDBC URL: `jdbc:h2:mem:telegram`
 - Пользователь: `sa`
 - Пароль: пустой
+
+В базовом профиле консоль **выключена** (`spring.h2.console.enabled: false`).
 
 ## Устранение неполадок
 
