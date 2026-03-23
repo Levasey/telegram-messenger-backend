@@ -33,6 +33,9 @@ telegram:
     webhook-secret-token: ${TELEGRAM_WEBHOOK_SECRET:}
     # Плейсхолдер {name} — имя пользователя в Telegram
     welcome-message: "Добро пожаловать, {name}! Рады видеть вас."
+  school:
+    time-zone: ${TELEGRAM_SCHOOL_TIMEZONE:Europe/Moscow}
+    reminder-cron: ${TELEGRAM_SCHOOL_REMINDER_CRON:0 0 9 * * *}
 
 management:
   endpoints:

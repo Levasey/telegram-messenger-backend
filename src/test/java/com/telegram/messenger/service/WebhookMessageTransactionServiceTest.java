@@ -2,11 +2,14 @@ package com.telegram.messenger.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.ZoneId;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import com.telegram.messenger.config.SchoolScheduleProperties;
 import com.telegram.messenger.config.TelegramBotProperties;
 import com.telegram.messenger.domain.Client;
 import com.telegram.messenger.repo.ClientRepository;
@@ -50,6 +54,9 @@ class WebhookMessageTransactionServiceTest {
 	private ClientRepository clientRepository;
 
 	@Mock
+	private LessonBookingService lessonBookingService;
+
+	@Mock
 	private ApplicationEventPublisher eventPublisher;
 
 	private WebhookMessageTransactionService service;
@@ -59,7 +66,14 @@ class WebhookMessageTransactionServiceTest {
 	void setUp() throws Exception {
 		TelegramBotProperties props = new TelegramBotProperties();
 		props.setWelcomeMessage("Здравствуйте, {name}!");
-		service = new WebhookMessageTransactionService(clientRepository, props, eventPublisher);
+		SchoolScheduleProperties school = new SchoolScheduleProperties();
+		school.setTimeZone("Europe/Moscow");
+		service = new WebhookMessageTransactionService(
+				clientRepository,
+				props,
+				school,
+				lessonBookingService,
+				eventPublisher);
 		objectMapper = new ObjectMapper();
 	}
 
@@ -67,18 +81,24 @@ class WebhookMessageTransactionServiceTest {
 	void newClient_savesAndPublishesWelcomeIntent() throws Exception {
 		TelegramMessageDto message = messageFrom(NEW_USER_UPDATE);
 		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.empty());
-		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
+		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> {
+			Client c = inv.getArgument(0);
+			c.setId(1L);
+			return c;
+		});
 
 		service.upsertClientAndMaybeWelcomeIntent(message);
 
 		verify(clientRepository).save(any(Client.class));
 		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.chatId() == 99L && i.text().contains("Иван")));
+		verify(lessonBookingService, never()).handleBookCommand(any(), anyString(), any());
 	}
 
 	@Test
 	void existingClient_plainMessage_noIntent() throws Exception {
 		TelegramMessageDto message = messageFrom(NEW_USER_UPDATE);
 		Client existing = new Client();
+		existing.setId(10L);
 		existing.setTelegramUserId(42L);
 		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
 		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -86,12 +106,14 @@ class WebhookMessageTransactionServiceTest {
 		service.upsertClientAndMaybeWelcomeIntent(message);
 
 		verify(eventPublisher, never()).publishEvent(any());
+		verify(lessonBookingService, never()).handleBookCommand(any(), anyString(), any());
 	}
 
 	@Test
 	void existingClient_start_sendsWelcome() throws Exception {
 		TelegramMessageDto message = messageFrom(START_UPDATE);
 		Client existing = new Client();
+		existing.setId(10L);
 		existing.setTelegramUserId(42L);
 		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
 		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -99,12 +121,14 @@ class WebhookMessageTransactionServiceTest {
 		service.upsertClientAndMaybeWelcomeIntent(message);
 
 		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.text().contains("Иван")));
+		verify(lessonBookingService, never()).handleBookCommand(any(), anyString(), any());
 	}
 
 	@Test
 	void existingClient_startWithBotUsername_sendsWelcome() throws Exception {
 		TelegramMessageDto message = messageFrom(START_WITH_BOT_UPDATE);
 		Client existing = new Client();
+		existing.setId(10L);
 		existing.setTelegramUserId(42L);
 		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
 		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -112,6 +136,7 @@ class WebhookMessageTransactionServiceTest {
 		service.upsertClientAndMaybeWelcomeIntent(message);
 
 		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.text().contains("Иван")));
+		verify(lessonBookingService, never()).handleBookCommand(any(), anyString(), any());
 	}
 
 	@Test
@@ -134,6 +159,37 @@ class WebhookMessageTransactionServiceTest {
 		assertThat(WebhookMessageTransactionService.isStartCommand("/start\tdeep-link-arg")).isTrue();
 		assertThat(WebhookMessageTransactionService.isStartCommand("/startx")).isFalse();
 		assertThat(WebhookMessageTransactionService.isStartCommand(" /start ")).isTrue();
+	}
+
+	@Test
+	void isBookCommand_variants() {
+		assertThat(WebhookMessageTransactionService.isBookCommand("/book")).isTrue();
+		assertThat(WebhookMessageTransactionService.isBookCommand("/BOOK")).isTrue();
+		assertThat(WebhookMessageTransactionService.isBookCommand("/book@vokals_bot")).isTrue();
+		assertThat(WebhookMessageTransactionService.isBookCommand("/book 25.03.2026 18:00")).isTrue();
+		assertThat(WebhookMessageTransactionService.isBookCommand("/bookx")).isFalse();
+	}
+
+	private static final String BOOK_UPDATE = """
+			{"update_id":5,"message":{"message_id":5,"from":{"id":42,"is_bot":false,"first_name":"Иван"},\
+			"chat":{"id":99,"type":"private"},"date":1,"text":"/book 2030-01-15 12:00"}}\
+			""";
+
+	@Test
+	void bookCommand_invokesBookingService_andPublishesReply() throws Exception {
+		TelegramMessageDto message = messageFrom(BOOK_UPDATE);
+		Client existing = new Client();
+		existing.setId(10L);
+		existing.setTelegramUserId(42L);
+		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
+		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
+		when(lessonBookingService.handleBookCommand(eq(existing), eq("/book 2030-01-15 12:00"), eq(ZoneId.of("Europe/Moscow"))))
+				.thenReturn("Записано");
+
+		service.upsertClientAndMaybeWelcomeIntent(message);
+
+		verify(lessonBookingService).handleBookCommand(eq(existing), eq("/book 2030-01-15 12:00"), eq(ZoneId.of("Europe/Moscow")));
+		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.chatId() == 99L && "Записано".equals(i.text())));
 	}
 
 	private TelegramMessageDto messageFrom(String rawUpdate) throws Exception {

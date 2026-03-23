@@ -1,5 +1,6 @@
 package com.telegram.messenger.service;
 
+import java.time.ZoneId;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.telegram.messenger.config.SchoolScheduleProperties;
 import com.telegram.messenger.config.TelegramBotProperties;
 import com.telegram.messenger.domain.Client;
 import com.telegram.messenger.repo.ClientRepository;
@@ -22,14 +24,20 @@ public class WebhookMessageTransactionService {
 
 	private final ClientRepository clientRepository;
 	private final TelegramBotProperties botProperties;
+	private final SchoolScheduleProperties schoolScheduleProperties;
+	private final LessonBookingService lessonBookingService;
 	private final ApplicationEventPublisher eventPublisher;
 
 	public WebhookMessageTransactionService(
 			ClientRepository clientRepository,
 			TelegramBotProperties botProperties,
+			SchoolScheduleProperties schoolScheduleProperties,
+			LessonBookingService lessonBookingService,
 			ApplicationEventPublisher eventPublisher) {
 		this.clientRepository = clientRepository;
 		this.botProperties = botProperties;
+		this.schoolScheduleProperties = schoolScheduleProperties;
+		this.lessonBookingService = lessonBookingService;
 		this.eventPublisher = eventPublisher;
 	}
 
@@ -66,6 +74,12 @@ public class WebhookMessageTransactionService {
 			String text = botProperties.getWelcomeMessage().replace("{name}", name);
 			eventPublisher.publishEvent(new WelcomeSendIntent(chatId, text));
 		}
+
+		if (isBookCommand(message.getText())) {
+			ZoneId schoolZone = ZoneId.of(schoolScheduleProperties.getTimeZone());
+			String bookingReply = lessonBookingService.handleBookCommand(client, message.getText(), schoolZone);
+			eventPublisher.publishEvent(new WelcomeSendIntent(chatId, bookingReply));
+		}
 	}
 
 	/**
@@ -84,8 +98,42 @@ public class WebhookMessageTransactionService {
 		return "/start".equalsIgnoreCase(cmd);
 	}
 
+	/**
+	 * Команда {@code /book}, в т.ч. {@code /book@BotUsername}.
+	 */
+	static boolean isBookCommand(String rawText) {
+		String cmd = firstToken(rawText);
+		if (cmd.isEmpty()) {
+			return false;
+		}
+		int at = cmd.indexOf('@');
+		if (at > 0) {
+			cmd = cmd.substring(0, at);
+		}
+		return "/book".equalsIgnoreCase(cmd);
+	}
+
+	/**
+	 * Текст после первого токена (команды), без ведущих пробелов.
+	 */
+	static String restAfterFirstToken(String rawText) {
+		if (rawText == null) {
+			return "";
+		}
+		String t = rawText.trim();
+		int n = t.length();
+		int i = 0;
+		while (i < n && !Character.isWhitespace(t.charAt(i))) {
+			i++;
+		}
+		while (i < n && Character.isWhitespace(t.charAt(i))) {
+			i++;
+		}
+		return t.substring(i).trim();
+	}
+
 	/** Первый «словесный» токен текста (до любого whitespace), после trim всего текста. */
-	private static String firstToken(String text) {
+	static String firstToken(String text) {
 		if (text == null) {
 			return "";
 		}
