@@ -78,5 +78,16 @@ class TelegramWebhookControllerTest {
 
 			verify(webhookUpdateService).handleRawUpdate(any());
 		}
+
+		@Test
+		void rejectsWithWrongHeader() throws Exception {
+			mockMvc.perform(post("/api/telegram/webhook")
+							.header(TelegramWebhookAuthenticator.SECRET_HEADER, "wrong")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{}"))
+					.andExpect(status().isForbidden());
+
+			verify(webhookUpdateService, never()).handleRawUpdate(any());
+		}
 	}
 }
