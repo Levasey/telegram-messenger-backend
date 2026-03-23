@@ -1,7 +1,6 @@
 package com.telegram.messenger.service;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -16,9 +15,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.telegram.messenger.config.TelegramBotProperties;
-import com.telegram.messenger.domain.Client;
-import com.telegram.messenger.repo.ClientRepository;
 import com.telegram.messenger.telegram.TelegramApiClient;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,13 +25,8 @@ class WebhookUpdateServiceTest {
 			"chat":{"id":99,"type":"private"},"date":1,"text":"привет"}}\
 			""";
 
-	private static final String START_UPDATE = """
-			{"update_id":2,"message":{"message_id":2,"from":{"id":42,"is_bot":false,"first_name":"Иван"},\
-			"chat":{"id":99,"type":"private"},"date":1,"text":"/start"}}\
-			""";
-
 	@Mock
-	private ClientRepository clientRepository;
+	private WebhookMessageTransactionService messageTransactionService;
 
 	@Mock
 	private TelegramApiClient telegramApiClient;
@@ -44,47 +35,29 @@ class WebhookUpdateServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		TelegramBotProperties props = new TelegramBotProperties();
-		props.setWelcomeMessage("Здравствуйте, {name}!");
 		service = new WebhookUpdateService(
 				new ObjectMapper(),
-				clientRepository,
-				telegramApiClient,
-				props);
+				messageTransactionService,
+				telegramApiClient);
 	}
 
 	@Test
-	void newClient_savesAndSendsWelcome() {
-		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.empty());
-		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
+	void delegatesToTransactionService_andSendsWhenIntentPresent() {
+		when(messageTransactionService.upsertClientAndMaybeWelcomeIntent(org.mockito.ArgumentMatchers.any()))
+				.thenReturn(Optional.of(new WelcomeSendIntent(99L, "Здравствуйте, Иван!")));
 
 		service.handleRawUpdate(NEW_USER_UPDATE);
 
-		verify(clientRepository).save(any(Client.class));
-		verify(telegramApiClient).sendMessage(eq(99L), contains("Иван"));
+		verify(telegramApiClient).sendMessage(eq(99L), eq("Здравствуйте, Иван!"));
 	}
 
 	@Test
-	void existingClient_plainMessage_noWelcome() {
-		Client existing = new Client();
-		existing.setTelegramUserId(42L);
-		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
-		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
+	void noSendWhenTransactionReturnsEmpty() {
+		when(messageTransactionService.upsertClientAndMaybeWelcomeIntent(org.mockito.ArgumentMatchers.any()))
+				.thenReturn(Optional.empty());
 
 		service.handleRawUpdate(NEW_USER_UPDATE);
 
 		verify(telegramApiClient, never()).sendMessage(org.mockito.ArgumentMatchers.anyLong(), any());
-	}
-
-	@Test
-	void existingClient_start_sendsWelcome() {
-		Client existing = new Client();
-		existing.setTelegramUserId(42L);
-		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
-		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
-
-		service.handleRawUpdate(START_UPDATE);
-
-		verify(telegramApiClient).sendMessage(eq(99L), contains("Иван"));
 	}
 }

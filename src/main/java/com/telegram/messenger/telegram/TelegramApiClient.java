@@ -7,9 +7,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClient;
 
 import com.telegram.messenger.config.TelegramBotProperties;
+import com.telegram.messenger.telegram.dto.TelegramBotApiResponse;
 
 @Component
 public class TelegramApiClient {
@@ -26,14 +28,17 @@ public class TelegramApiClient {
 				.build();
 	}
 
-	public void sendMessage(long chatId, String text) {
+	/**
+	 * @return {@code true}, если Telegram вернул {@code ok: true}; иначе {@code false} (в т.ч. при сетевой ошибке)
+	 */
+	public boolean sendMessage(long chatId, String text) {
 		if (!StringUtils.hasText(properties.getToken())) {
 			log.debug("TELEGRAM_BOT_TOKEN пуст — сообщение не отправлено");
-			return;
+			return false;
 		}
 		String path = "/bot" + properties.getToken() + "/sendMessage";
 		try {
-			restClient.post()
+			TelegramBotApiResponse response = restClient.post()
 					.uri(path)
 					.contentType(MediaType.APPLICATION_JSON)
 					.body(Map.of(
@@ -41,10 +46,24 @@ public class TelegramApiClient {
 							"text", text
 					))
 					.retrieve()
-					.toBodilessEntity();
+					.body(TelegramBotApiResponse.class);
+			if (response == null) {
+				log.warn("Telegram sendMessage: пустое тело ответа (chat_id={})", chatId);
+				return false;
+			}
+			if (!response.isOk()) {
+				log.warn(
+						"Telegram sendMessage отклонён: chat_id={}, error_code={}, description={}",
+						chatId,
+						response.getErrorCode(),
+						response.getDescription());
+				return false;
+			}
+			return true;
 		}
-		catch (Exception e) {
-			log.warn("Не удалось отправить сообщение в Telegram: {}", e.getMessage());
+		catch (RestClientException e) {
+			log.warn("Не удалось отправить сообщение в Telegram (chat_id={}): {}", chatId, e.getMessage());
+			return false;
 		}
 	}
 }
