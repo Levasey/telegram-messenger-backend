@@ -1,0 +1,7 @@
+# Скопируйте в application-local.yml (файл в .gitignore) и подставьте токен от @BotFather.
+# Запуск с профилем local: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+# или: export SPRING_PROFILES_ACTIVE=local
+
+telegram:
+  bot:
+    token: "YOUR_BOT_TOKEN_FROM_BOTFATHER"
