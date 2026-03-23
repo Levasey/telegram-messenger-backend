@@ -1,3 +1,7 @@
+# Порт по умолчанию 9090 — реже конфликтует с другими сервисами на 8080. Переопределение: SERVER_PORT=8080
+server:
+  port: ${SERVER_PORT:9090}
+
 spring:
   application:
     name: telegram-messenger-backend

@@ -8,8 +8,9 @@ help:
 	@echo "  make test       — только тесты"
 	@echo "  make package    — собрать JAR без тестов"
 	@echo "  make clean      — mvn clean"
-	@echo "  make run        — spring-boot:run (профиль default)"
+	@echo "  make run        — spring-boot:run (профиль default, порт см. SERVER_PORT)"
 	@echo "  make run-local  — spring-boot:run с SPRING_PROFILES_ACTIVE=local"
+	@echo "  другой порт: SERVER_PORT=8080 make run"
 
 clean:
 	$(MVN) -q clean
