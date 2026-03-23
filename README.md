@@ -117,10 +117,14 @@ telegram:
 
 В проде webhook доступен только по **HTTPS**; URL регистрируется методом [`setWebhook`](https://core.telegram.org/bots/api#setwebhook).
 
-Пример регистрации (подставьте токен и публичный HTTPS-URL):
+**Секрет webhook (рекомендуется в проде):** задайте параметр [`secret_token`](https://core.telegram.org/bots/api#setwebhook) при `setWebhook` и тот же секрет в приложении — переменная **`TELEGRAM_WEBHOOK_SECRET`** или `telegram.bot.webhook-secret-token` в YAML. Telegram передаёт его в заголовке **`X-Telegram-Bot-Api-Secret-Token`**; при несовпадении или отсутствии заголовка ответ **`403 Forbidden`**. Если секрет в конфиге пустой, проверка отключена (удобно для локальной разработки).
+
+Пример регистрации (подставьте токен, URL и свой секрет):
 
 ```bash
-curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your.host/api/telegram/webhook"
+curl -s -G "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  --data-urlencode "url=https://your.host/api/telegram/webhook" \
+  --data-urlencode "secret_token=<СЕКРЕТ_КАК_В_TELEGRAM_WEBHOOK_SECRET>"
 ```
 
 ## Данные: клиенты

@@ -5,4 +5,6 @@
 telegram:
   bot:
     token: "YOUR_BOT_TOKEN_FROM_BOTFATHER"
+    # Секрет webhook (тот же, что в setWebhook secret_token); или TELEGRAM_WEBHOOK_SECRET
+    # webhook-secret-token: "случайная_строка_1_256_символов"
     # welcome-message: "Свой текст, плейсхолдер {name}"

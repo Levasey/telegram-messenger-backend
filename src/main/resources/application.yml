@@ -28,6 +28,8 @@ spring:
 telegram:
   bot:
     token: ${TELEGRAM_BOT_TOKEN:}
+    # Секрет для setWebhook (secret_token); Telegram шлёт его в X-Telegram-Bot-Api-Secret-Token. Пустой — без проверки.
+    webhook-secret-token: ${TELEGRAM_WEBHOOK_SECRET:}
     # Плейсхолдер {name} — имя пользователя в Telegram
     welcome-message: "Добро пожаловать, {name}! Рады видеть вас."
 
