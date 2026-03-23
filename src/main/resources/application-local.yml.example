@@ -5,3 +5,4 @@
 telegram:
   bot:
     token: "YOUR_BOT_TOKEN_FROM_BOTFATHER"
+    # welcome-message: "Свой текст, плейсхолдер {name}"
