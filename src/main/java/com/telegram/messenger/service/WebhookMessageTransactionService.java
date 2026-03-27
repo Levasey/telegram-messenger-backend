@@ -14,6 +14,7 @@ import com.telegram.messenger.config.SchoolScheduleProperties;
 import com.telegram.messenger.config.TelegramBotProperties;
 import com.telegram.messenger.domain.Client;
 import com.telegram.messenger.repo.ClientRepository;
+import com.telegram.messenger.telegram.dto.TelegramChatDto;
 import com.telegram.messenger.telegram.dto.TelegramMessageDto;
 import com.telegram.messenger.telegram.dto.TelegramUserDto;
 
@@ -42,8 +43,9 @@ public class WebhookMessageTransactionService {
 	}
 
 	/**
-	 * Сохранение клиента в транзакции; при необходимости публикует {@link WelcomeSendIntent},
-	 * который обрабатывается после успешного коммита (см. {@link WelcomeMessageAfterCommitListener}).
+	 * Сохранение клиента в транзакции; при необходимости публикует {@link WelcomeSendIntent}
+	 * (в личке — на каждое сообщение, в группах — при первом обращении или {@code /start}),
+	 * обрабатывается после успешного коммита (см. {@link WelcomeMessageAfterCommitListener}).
 	 */
 	@Transactional
 	public void upsertClientAndMaybeWelcomeIntent(TelegramMessageDto message) {
@@ -69,7 +71,7 @@ public class WebhookMessageTransactionService {
 		client.setLastName(from.getLastName());
 		clientRepository.save(client);
 
-		if (isNew || isStartCommand(message.getText())) {
+		if (shouldSendWelcome(message, isNew)) {
 			String name = displayName(from);
 			String text = botProperties.getWelcomeMessage().replace("{name}", name);
 			eventPublisher.publishEvent(new WelcomeSendIntent(chatId, text));
@@ -144,6 +146,19 @@ public class WebhookMessageTransactionService {
 			i++;
 		}
 		return t.substring(0, i);
+	}
+
+	/**
+	 * В личных чатах — приветствие на каждое сообщение; в группах и супергруппах — только при первом
+	 * сохранении клиента или по команде {@code /start}, чтобы не заспамить чат.
+	 */
+	static boolean shouldSendWelcome(TelegramMessageDto message, boolean isNewClient) {
+		return isPrivateChat(message) || isNewClient || isStartCommand(message.getText());
+	}
+
+	private static boolean isPrivateChat(TelegramMessageDto message) {
+		TelegramChatDto chat = message.getChat();
+		return chat != null && "private".equalsIgnoreCase(chat.getType());
 	}
 
 	private static String displayName(TelegramUserDto from) {

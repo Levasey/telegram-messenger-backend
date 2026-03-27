@@ -95,7 +95,7 @@ class WebhookMessageTransactionServiceTest {
 	}
 
 	@Test
-	void existingClient_plainMessage_noIntent() throws Exception {
+	void existingClient_privatePlainMessage_sendsWelcome() throws Exception {
 		TelegramMessageDto message = messageFrom(NEW_USER_UPDATE);
 		Client existing = new Client();
 		existing.setId(10L);
@@ -105,8 +105,27 @@ class WebhookMessageTransactionServiceTest {
 
 		service.upsertClientAndMaybeWelcomeIntent(message);
 
-		verify(eventPublisher, never()).publishEvent(any());
+		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.chatId() == 99L && i.text().contains("Иван")));
 		verify(lessonBookingService, never()).handleBookCommand(any(), anyString(), any());
+	}
+
+	private static final String GROUP_MESSAGE_UPDATE = """
+			{"update_id":6,"message":{"message_id":6,"from":{"id":42,"is_bot":false,"first_name":"Иван"},\
+			"chat":{"id":-1001,"type":"group"},"date":1,"text":"привет"}}\
+			""";
+
+	@Test
+	void existingClient_groupPlainMessage_noWelcome() throws Exception {
+		TelegramMessageDto message = messageFrom(GROUP_MESSAGE_UPDATE);
+		Client existing = new Client();
+		existing.setId(10L);
+		existing.setTelegramUserId(42L);
+		when(clientRepository.findByTelegramUserId(42L)).thenReturn(Optional.of(existing));
+		when(clientRepository.save(any(Client.class))).thenAnswer(inv -> inv.getArgument(0));
+
+		service.upsertClientAndMaybeWelcomeIntent(message);
+
+		verify(eventPublisher, never()).publishEvent(any());
 	}
 
 	@Test
@@ -162,6 +181,20 @@ class WebhookMessageTransactionServiceTest {
 	}
 
 	@Test
+	void shouldSendWelcome_privateOrNewOrStart() throws Exception {
+		TelegramMessageDto existingPrivate = messageFrom(NEW_USER_UPDATE);
+		assertThat(WebhookMessageTransactionService.shouldSendWelcome(existingPrivate, false)).isTrue();
+		TelegramMessageDto groupMsg = messageFrom(GROUP_MESSAGE_UPDATE);
+		assertThat(WebhookMessageTransactionService.shouldSendWelcome(groupMsg, false)).isFalse();
+		assertThat(WebhookMessageTransactionService.shouldSendWelcome(groupMsg, true)).isTrue();
+		TelegramMessageDto startInGroup = messageFrom("""
+				{"update_id":7,"message":{"message_id":7,"from":{"id":1,"is_bot":false,"first_name":"U"},\
+				"chat":{"id":-2,"type":"group"},"date":1,"text":"/start"}}\
+				""");
+		assertThat(WebhookMessageTransactionService.shouldSendWelcome(startInGroup, false)).isTrue();
+	}
+
+	@Test
 	void isBookCommand_variants() {
 		assertThat(WebhookMessageTransactionService.isBookCommand("/book")).isTrue();
 		assertThat(WebhookMessageTransactionService.isBookCommand("/BOOK")).isTrue();
@@ -189,6 +222,7 @@ class WebhookMessageTransactionServiceTest {
 		service.upsertClientAndMaybeWelcomeIntent(message);
 
 		verify(lessonBookingService).handleBookCommand(eq(existing), eq("/book 2030-01-15 12:00"), eq(ZoneId.of("Europe/Moscow")));
+		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.chatId() == 99L && i.text().contains("Иван")));
 		verify(eventPublisher).publishEvent(argThat((WelcomeSendIntent i) -> i.chatId() == 99L && "Записано".equals(i.text())));
 	}
 
