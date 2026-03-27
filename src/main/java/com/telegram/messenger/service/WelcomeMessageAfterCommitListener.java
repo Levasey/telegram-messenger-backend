@@ -15,7 +15,7 @@ public class WelcomeMessageAfterCommitListener {
 		this.telegramApiClient = telegramApiClient;
 	}
 
-	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
 	public void onWelcomeIntent(WelcomeSendIntent intent) {
 		telegramApiClient.sendMessage(intent.chatId(), intent.text());
 	}

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.telegram.messenger.telegram.dto.TelegramMessageDto;
 import com.telegram.messenger.telegram.dto.TelegramUpdateDto;
 
 @Service
@@ -29,10 +30,11 @@ public class WebhookUpdateService {
 		}
 		try {
 			TelegramUpdateDto update = objectMapper.readValue(body, TelegramUpdateDto.class);
-			if (update.getMessage() == null) {
+			TelegramMessageDto incoming = update.resolveIncomingMessage();
+			if (incoming == null) {
 				return;
 			}
-			messageTransactionService.upsertClientAndMaybeWelcomeIntent(update.getMessage());
+			messageTransactionService.upsertClientAndMaybeWelcomeIntent(incoming);
 		}
 		catch (Exception e) {
 			log.warn("Не удалось разобрать webhook: {}", e.getMessage());

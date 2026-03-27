@@ -11,6 +11,10 @@ public class TelegramUpdateDto {
 
 	private TelegramMessageDto message;
 
+	/** Сообщение из подключённого Business-аккаунта (Bot API 7.2+); иначе апдейт приходит в {@link #message}. */
+	@JsonProperty("business_message")
+	private TelegramMessageDto businessMessage;
+
 	public Long getUpdateId() {
 		return updateId;
 	}
@@ -25,5 +29,21 @@ public class TelegramUpdateDto {
 
 	public void setMessage(TelegramMessageDto message) {
 		this.message = message;
+	}
+
+	public TelegramMessageDto getBusinessMessage() {
+		return businessMessage;
+	}
+
+	public void setBusinessMessage(TelegramMessageDto businessMessage) {
+		this.businessMessage = businessMessage;
+	}
+
+	/** Сообщение для обработки вебхуком: обычное или бизнес-сообщение. */
+	public TelegramMessageDto resolveIncomingMessage() {
+		if (message != null) {
+			return message;
+		}
+		return businessMessage;
 	}
 }

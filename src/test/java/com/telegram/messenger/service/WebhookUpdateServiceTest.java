@@ -19,6 +19,11 @@ class WebhookUpdateServiceTest {
 			"chat":{"id":99,"type":"private"},"date":1,"text":"привет"}}\
 			""";
 
+	private static final String BUSINESS_START_UPDATE = """
+			{"update_id":2,"business_message":{"message_id":2,"from":{"id":42,"is_bot":false,"first_name":"Иван"},\
+			"chat":{"id":99,"type":"private"},"date":1,"text":"/start"}}\
+			""";
+
 	@Mock
 	private WebhookMessageTransactionService messageTransactionService;
 
@@ -34,6 +39,13 @@ class WebhookUpdateServiceTest {
 	@Test
 	void delegatesToTransactionService_whenMessagePresent() {
 		service.handleRawUpdate(NEW_USER_UPDATE);
+
+		verify(messageTransactionService).upsertClientAndMaybeWelcomeIntent(any());
+	}
+
+	@Test
+	void delegatesToTransactionService_whenBusinessMessagePresent() {
+		service.handleRawUpdate(BUSINESS_START_UPDATE);
 
 		verify(messageTransactionService).upsertClientAndMaybeWelcomeIntent(any());
 	}
